@@ -1,0 +1,9 @@
+
+version: '3.4'
+
+services:
+  simulateddevice:
+    image: simulateddevice
+    build:
+      context: .
+      dockerfile: ./Dockerfile
