@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="M2Mqtt" Version="4.3.0" />
     <PackageReference Include="Microsoft.Azure.Devices.Client" Version="1.*" />
   </ItemGroup>
 
