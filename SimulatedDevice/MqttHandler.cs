@@ -14,22 +14,43 @@ using System.IO;
 using static System.IO.Directory;
 using static System.IO.Path;
 using static System.Environment;
+using System.Net;
 
 namespace SimulatedDevice
 {
     public class MqttHandler
     {
         MqttClient client = new MqttClient("raspberrypi");
-        string subscriptionTopic = "device/authcontrol";
+        string subscriptionTopic = "Rpi/Request/AuthControl";
         string SendTopic = "device/startup/broadcast";
         internal string recievedClientID = string.Empty;
+        internal string recievedClientNumber = string.Empty;
         public CancellationTokenSource waitCts;
         JsonSerializerSettings jsonSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
         internal void Initialize()
         {
-            // create client instance 
-            client = new MqttClient("192.168.8.100");
-            //client = new MqttClient("raspberrypi");
+            // create client instance trying possible raspberry pi IPs
+            
+            
+            try
+            {
+                client = new MqttClient("raspberrypi.local");
+                //client = new MqttClient("192.168.8.101");   //change this back to raspberrypi.local
+            }
+            catch (System.Net.Sockets.SocketException)
+            {
+                Console.WriteLine("couldnt conect to broker via socket raspberrypi");
+                try
+                {
+                    client = new MqttClient("192.168.8.150");   //static ip assigned to raspberry pi
+                }
+                catch (System.Net.Sockets.SocketException e)
+                {
+                    Console.WriteLine("couldnt conect to broker via socket 192.168.8.102");
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("Failed to connect to mqtt broker: " + e.Message);
+                }
+            }
 
             // register to message received 
             client.MqttMsgPublishReceived += client_MqttMsgReceived;
@@ -41,24 +62,33 @@ namespace SimulatedDevice
             client.Subscribe(new string[] { subscriptionTopic }, new byte[] { MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE});
         }
 
-        internal void BroadcastID(string _deviceID)
+        internal void BroadcastID(string _deviceType)
         {
             //send device id
-            string sendMsg = "DeviceID:" + _deviceID;
-            client.Publish(SendTopic, Encoding.UTF8.GetBytes(sendMsg), MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE, false);
+            string sendMsg = "deviceType:" + _deviceType;
+            client.Publish(SendTopic, Encoding.UTF8.GetBytes(sendMsg), MqttMsgBase.QOS_LEVEL_AT_LEAST_ONCE, false);
 
             waitCts = new CancellationTokenSource();
         }
         void client_MqttMsgReceived(object sender, MqttMsgPublishEventArgs e)
         {
             string receivedMsg = Encoding.UTF8.GetString(e.Message);
-            if (receivedMsg.Contains("ID:"))
+            if (receivedMsg.Contains("ID:"))    //Id will come in the format of "ID:<userIdWithoutParenthesis>;userPhoneNo
             {
                 Console.WriteLine("received ID from client" + receivedMsg);
-                recievedClientID = receivedMsg.Substring(startIndex: 3);  //read the client ID
+                var iDstartIndex = receivedMsg.IndexOf(':');
+                //Console.WriteLine("index start is:" + iDstartIndex);
+                var numberstartIndex = receivedMsg.LastIndexOf(';');
+                //Console.WriteLine("index end is:" + numberstartIndex);
+                int iDlength = numberstartIndex - iDstartIndex + 1; //the id lies between the 2 symbols
+
+                //the id lies between the 2 symbols
+                recievedClientID = receivedMsg.Substring(startIndex: iDstartIndex, length: iDlength);  //read the client ID
+                recievedClientNumber = receivedMsg.Substring(startIndex: numberstartIndex + 1);  //read the client phone number
+
                 //at the stage, the main program uses this ID to alter the devices "row" info
                 waitCts.Cancel();   //call the cancel and allow mainProgram to continue
-                //the append it to the telemetry data point classesio
+                //then append it to the telemetry data point classesio
             }
         }
         internal void BroadcastDevices(string _devicesJson)
@@ -80,6 +110,8 @@ namespace SimulatedDevice
             Console.ForegroundColor = ConsoleColor.DarkGreen;
             Console.WriteLine("Client agreement complete");
             Console.ForegroundColor = ConsoleColor.White;
+            client.Publish(SendTopic, Encoding.UTF8.GetBytes("ControlAccessGranted"), MqttMsgBase.QOS_LEVEL_EXACTLY_ONCE, false);
+            client.MqttMsgPublished -= client_MqttMsgPublished; //to avoid loop sending
             waitCts.Cancel();   //this allows main program to finish agreement logic and start sending telemetry
 
         }

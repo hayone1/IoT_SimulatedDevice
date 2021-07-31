@@ -10,8 +10,8 @@ namespace SimulatedDevice
     {
         public const string awayMode = "awayMode";
         public const string homeMode = "homeMode";
-        public const string sleepMode = "0";
-        public const string awakeMode = "1";
+        public const string sleepMode = "sleepMode";
+        public const string awakeMode = "awakeMode";
         public const string normalMessage = "normal";
         //both warning and critical message is mailed to user
         public const string warningMessage = "warning";
@@ -20,6 +20,26 @@ namespace SimulatedDevice
         public const string UnlockDoor = "UnlockDoor";
         public const string TogglePresenceMode = "TogglePresenceMode";
         public const string ToggleSleepMode = "ToggleSleepMode";
+        public const string ToggleMotionSensor = "ToggleMotionSensor";
+        public const string ToggleExtensionBox = "ToggleExtensionBox";
+
+        public const string myrpi = "myrpi";
+        public const string myard1 = "myard1";  
+        public const string myard2 = "myard2";
+        public const string mytemperaturesensor = "mytemperaturesensor"; //ard1
+        public const string myhumiditysensor = "myhumiditysensor";  //ard1
+        public const string mydoorsensor = "mydoorsensor";  //ard2
+        public const string mydoorcontroller = "mydoorcontroller";  //ard2
+        public const string mymotionsensor = "mymotionsensor";  //ard1
+        public const string mylightsensor1 = "mylightsensor1";  //ard1
+        public const string mylightsensor2 = "mylightsensor2";  //ard2
+        public const string myextensionbox = "myextensionbox";  //ard1
+        public const string myuserdetails = "myuserdetails";
+        public const string misc = "misc";
+        public const string property2 = "property2";
+
+
+
 
 
     }

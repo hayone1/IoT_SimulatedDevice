@@ -22,12 +22,12 @@ namespace SimulatedDevice
         //the label of the properties eg temperature, humidity
         public string propertyLabel1 { get; set; }  //usually affirms connection
         public string propertyLabel2 { get; set; }  //most important parameter here
-        public double property1 { get; set; }   //corresponds to PartitionKey
+        public bool property1 { get; set; }   //corresponds to PartitionKey
         //public T property2 { get; set; }   //corresponds to RowKey
         public string Etag { get; set; }
         public string Misc { get; set; }    //for any redundant data needed
 
-        public TelemetryData(string s_partitionKey, string s_rowKey, string s_myDeviceId, string label1, string label2, double s_property1, string s_misc = null)
+        public TelemetryData(string s_partitionKey, string s_rowKey, string s_myDeviceId, string label1, string label2, bool s_property1, string s_misc = null)
         {
             PartitionKey = s_partitionKey;
             RowKey = s_rowKey;
