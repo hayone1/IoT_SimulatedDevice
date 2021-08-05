@@ -8,18 +8,20 @@ namespace SimulatedDevice
 {
     class SystemIOperations
     {   //this class handles serial communication with the arduino
-        private SerialPort ard1Port;
-        private SerialPort ard2Port;
+        private SerialPort ard1Port;    //indoor arduino
+        private SerialPort ard2Port;    //outdoor arduino
         private List<SerialPort> ardSerialPorts;
         //private Action<object, SerialDataReceivedEventArgs> localSerialDataReceivedCallback;
         private SerialDataReceivedEventHandler dataReceivedHandler;
         public SystemIOperations(Action<object, SerialDataReceivedEventArgs> SerialDataReceivedCallback)
         {
             //initialize parameters and add callback to react to serial data received from arduinos
+            //the callback is a method within the initializing class, which in this cass is Program
             //localSerialDataReceivedCallback = SerialDataReceivedCallback;
             dataReceivedHandler = new SerialDataReceivedEventHandler(SerialDataReceivedCallback);    //assign delegate to call back
             if (OperatingSystem.IsLinux())
             {
+                //ports labels were made fixed 
                 ard1Port = new SerialPort("/dev/ttyACM0");
                 ard2Port = new SerialPort("/dev/ttyACM1");
                 Console.WriteLine("We're on linux!");
@@ -28,8 +30,12 @@ namespace SimulatedDevice
             {
                 //I cant confirm that the com ports here will work for everybody
                 Console.WriteLine("We're on WIndows!");
-                ard1Port = new SerialPort("COM10", 9600);
-                ard2Port = new SerialPort("COM7", 9600);
+                ard1Port = new SerialPort("COM7", 9600);
+                ard2Port = new SerialPort("COM10", 9600);
+                //ard1Port = new SerialPort("COM8", 9600);
+                //ard2Port = new SerialPort("COM14", 9600);
+            }
+
                 ard1Port.BaudRate = 9600;
                 ard1Port.Parity = Parity.None;
                 ard1Port.StopBits = StopBits.One;
@@ -46,10 +52,9 @@ namespace SimulatedDevice
                 ard2Port.RtsEnable = true;
                 ard1Port.Encoding = System.Text.Encoding.ASCII;
 
-                ard1Port.DataReceived += dataReceivedHandler;
-                ard2Port.DataReceived += dataReceivedHandler;
-            }
+                
             ardSerialPorts = new List<SerialPort> { ard1Port, ard2Port };
+            StartSerial();
 
             //foreach (SerialPort _port in ardSerialPorts)
             //{   //initialize port parameters
@@ -66,10 +71,16 @@ namespace SimulatedDevice
 
 
         }
-
+        public void ActivateSerialDataHanadler()
+        {
+            ard1Port.DataReceived += dataReceivedHandler;
+            ard2Port.DataReceived += dataReceivedHandler;
+        }
         public void StartSerial()
         {
             //ard1Port.DataReceived += new SerialDataReceivedEventHandler(DataReceivedHandler);
+            //ard1Port.Open();
+            //ard2Port.Open();
             foreach(SerialPort _port in ardSerialPorts) {_port.Open(); }
         }
         public void StopSerial()

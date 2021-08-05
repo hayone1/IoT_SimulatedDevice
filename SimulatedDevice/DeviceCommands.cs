@@ -28,6 +28,7 @@ namespace SimulatedDevice
 
         #region To receive and respond to device direct method invokation 
         //use string - "0" to convert int in arduino
+        //SendSerial take in the arguement and the device to send the commad to
         internal  Task<MethodResponse> ToggleLight(MethodRequest methodRequest = null, object userContext = null)
         {
             var data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
@@ -66,7 +67,7 @@ namespace SimulatedDevice
                 // Acknowlege the direct method call with a 400 error message
                 string result = "{\"result\":\"Invalid parameter\"}";
                 Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine(result);
+                Console.WriteLine($"{result}; data: {data}");
                 Console.ForegroundColor = ConsoleColor.White;
                 return Task.FromResult(new MethodResponse(Encoding.UTF8.GetBytes(result), 400));
             }
@@ -101,9 +102,9 @@ namespace SimulatedDevice
             //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
             //toggle the sleep mode, by default, this starts out as Awake on device set-up
             //turn off all the lights, extension, check if the front door is closed and close it if it isnt
-            if (Program.light1.property2 == true) { ToggleLight1(); }
-            if (Program.light1.property2 == true) { ToggleLight2(); }
-            if (Program.doorSensor.property2 == false) { ToggleDoor(); }
+            if (Program.light1.property2 == true) { ToggleLight1(); }   //if its on
+            if (Program.light1.property2 == true) { ToggleLight2(); }   //if its on
+            if (Program.doorSensor.property2 == true) { ToggleDoor(); } //if its open
 
             Program.raspBerryPi.Misc = Program.raspBerryPi.Misc == messages.sleepMode ? messages.awakeMode : messages.sleepMode;
 
@@ -126,6 +127,23 @@ namespace SimulatedDevice
                 serialOPerations.SendSerial("41", $"{messages.myard2};{Program.doorController.deviceId}");  //open it
             }
             Program.doorController.property2 = Program.doorController.property2 == 90 ? 0 : 90;
+
+            string result = $"{{\"result\":\"Executed direct method: {methodRequest.Name}\"}}";
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+            Console.WriteLine(result);
+            Console.ForegroundColor = ConsoleColor.White;
+            return Task.FromResult(new MethodResponse(Encoding.UTF8.GetBytes(result), 200));
+        }
+        internal Task<MethodResponse> LockDoor(MethodRequest methodRequest = null, object userContext = null)
+        {
+            //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
+            //signal the arduino to open/close the door, make the lcd always signify what's going on
+            serialOPerations.SendSerial("40", $"{messages.myard2};{Program.doorController.deviceId}");
+            Program.doorController.property2 = 0;   //should be zero after
+
+            Console.ForegroundColor = ConsoleColor.DarkGreen;
+            Console.WriteLine("Force close door");
+            Console.ForegroundColor = ConsoleColor.White;
 
             string result = $"{{\"result\":\"Executed direct method: {methodRequest.Name}\"}}";
             Console.ForegroundColor = ConsoleColor.DarkGreen;
@@ -168,6 +186,54 @@ namespace SimulatedDevice
 
             Console.ForegroundColor = ConsoleColor.DarkGreen;
             Console.WriteLine("Force close door");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+        #endregion
+
+        #region request telemetry from Arduinos
+        internal void RequestTemperature()
+        {
+            //request temperature from Arduino 1
+            serialOPerations.SendSerial("10", $"{messages.myard1};{Program.temperatueSensor.deviceId}");
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("Read House Temperature");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+        internal void RequestHumidity()
+        {
+            //request temperature from Arduino 1
+            serialOPerations.SendSerial("20", $"{messages.myard1};{Program.humiditySensor.deviceId}");
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("Read House Humidity");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+        internal void RequestMotionSensorState()
+        {
+            //request temperature from Arduino 1
+            serialOPerations.SendSerial("30", $"{messages.myard1};{Program.humiditySensor.deviceId}");
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("Read House Motion Sensor State");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+        internal void RequestDoorSensorState()
+        {
+            //request temperature from Arduino 1
+            serialOPerations.SendSerial("10", $"{messages.myard2};{Program.doorSensor.deviceId}");
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("Read House Door Sensor State");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+        internal void RequestDoorControllerState()
+        {
+            //request temperature from Arduino 1
+            serialOPerations.SendSerial("20", $"{messages.myard2};{Program.doorController.deviceId}");
+
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.WriteLine("Read House Door Controller State");
             Console.ForegroundColor = ConsoleColor.White;
         }
         #endregion

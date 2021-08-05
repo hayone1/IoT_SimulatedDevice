@@ -1,6 +1,7 @@
 ﻿using Microsoft.Azure.Devices.Client;
 using Newtonsoft.Json;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
@@ -21,7 +22,7 @@ namespace SimulatedDevice
 
 
         private static readonly string RpiConnectionString = "HostName=FinalYearHub.azure-devices.net;DeviceId=RaspberryPi;SharedAccessKey=rwforzwg0XC7eZpARG0bKD+mjoBkX6ebvEOQ26w2RIA=";
-        private static TimeSpan telemetryInterval = TimeSpan.FromSeconds(20);
+        private static TimeSpan telemetryInterval = TimeSpan.FromSeconds(30);
         private static string telemetryDataString;
         //create devices connected to raspberry pi including raspberry pi
         //private static readonly string RpiConnectionString = "HostName=FinalYearHub.azure-devices.net;DeviceId=MyDotnetDevice;SharedAccessKey=c/HyNUWA04EyjH5wdfpOuY4PtlCG+gI3BMuqARb7kww=";
@@ -40,14 +41,16 @@ namespace SimulatedDevice
         internal static TelemetryDataPoint<bool> extension = new TelemetryDataPoint<bool>("extensionbox", "extensionbox123", messages.myextensionbox, "connected", "active", false, s_property2: false);   //extension box
         internal static TelemetryDataPoint<string> UserDetails = new TelemetryDataPoint<string>("UserID", "userdetails123", messages.myuserdetails, "connected", "phoneno", false, s_property2: "+15005550006", $"{messages.normalMessage}:this is a normal message");   //initialized using magic number
 
-
+        //the angles between which the door operates
+        internal static int doorRotMin = 45;
+        internal static int doorRotMax = 175;
 
         //add the devices to list
         //private static List<TelemetryDataPoint> telemetryDevices = new List<TelemetryDataPoint>
         //        {raspBerryPi, arduino1, arduino2, temperatureSensor, humiditySensor, doorSensor, motionSensor, light1, light2};
-        private static Dictionary<string, object> telemetryDevicesDict = new Dictionary<string, object>()
+        private static Dictionary<string, dynamic> telemetryDevicesDict = new Dictionary<string, dynamic>()
         {
-            //I hope the object casting works lol
+            //I hope the object casting works lol, the dynamic may be dangerous
             { raspBerryPi.deviceId, raspBerryPi},
             { arduino1.deviceId, arduino1},
             { arduino2.deviceId, arduino2 },
@@ -67,15 +70,18 @@ namespace SimulatedDevice
         private static MqttHandler LocalNetworkHandler = new MqttHandler();
         internal static SystemIOperations serialOPerations = new SystemIOperations(OnSerialReceived);  //to communicate with the arduinos over serial
         private static DeviceCommands deviceCommands = new DeviceCommands(serialOPerations);    //methods to handle serial commands from cloud
+        private static int motionSensorCalibrationDelay = 58;   //wit time for motion sensor to properly calibrate
         //work on storing devices file to use on startup and test auth with mqttX
         public static async Task Main()
         {
+            Stopwatch stopwatch = new Stopwatch();  //stop watch is to account for the motion sensor starting time
+            stopwatch.Start();
             Console.WriteLine("Routing Practical: Simulated device\n press Ctrl + C to cancel");
             //serialOPerations = new SystemIOperations(OnSerialReceived);
             //deviceCommands = new DeviceCommands(serialOPerations);
             #region if device has not paired with client yet
 #if DEBUG
-
+            //change telemetryDevicesDict to storedDeviceTelemetry of proceed with initialized dictionary
             Dictionary<string, object> storedDeviceTelemetry = LocalNetworkHandler.CheckExistingUser();
             if (storedDeviceTelemetry == null)    //if device has not been athenticated b4
             {
@@ -145,10 +151,13 @@ namespace SimulatedDevice
             await deviceClient.SetMethodHandlerAsync(messages.ToggleLight, deviceCommands.ToggleLight, null);
             await deviceClient.SetMethodHandlerAsync(messages.TogglePresenceMode, deviceCommands.TogglePresenceMode, null);
             await deviceClient.SetMethodHandlerAsync(messages.ToggleSleepMode, deviceCommands.ToggleSleepMode, null);
-            await deviceClient.SetMethodHandlerAsync(messages.UnlockDoor, deviceCommands.ToggleDoor, null);
+            await deviceClient.SetMethodHandlerAsync(messages.ToggleDoor, deviceCommands.ToggleDoor, null);
+            await deviceClient.SetMethodHandlerAsync(messages.LockDoor, deviceCommands.LockDoor, null);
             await deviceClient.SetMethodHandlerAsync(messages.ToggleMotionSensor, deviceCommands.ToggleMotionSensor, null);
             await deviceClient.SetMethodHandlerAsync(messages.ToggleExtensionBox, deviceCommands.ToggleExtension, null);
             Console.WriteLine("back to main thread");
+
+
             //ReceiveDirectCalls();  //start on a separate thread
 
 
@@ -162,10 +171,16 @@ namespace SimulatedDevice
                 Console.WriteLine("Exiting...");
             };
 
-
+            stopwatch.Stop();
+            if (!(stopwatch.Elapsed.TotalSeconds >= motionSensorCalibrationDelay))  //if motion sensor calibration time hasn't passed yet
+            {
+                Console.WriteLine("waiting for Motion Sensor Calibration");
+                await Task.Delay(TimeSpan.FromSeconds(motionSensorCalibrationDelay - stopwatch.Elapsed.TotalSeconds));
+            }
 
             //perform changes to telemetry data at this point
-            //UpdateTelemetry();  //populate this
+
+            serialOPerations.ActivateSerialDataHanadler();  //alloe device to respond to serial input
             await SendDeviceToCloudMessagesAsync(cts.Token);
             await deviceClient.CloseAsync();
             //ok.Dispose();
@@ -178,7 +193,25 @@ namespace SimulatedDevice
         }
 
 
-        private static void UpdateTelemetry() { } //to update telemetry=
+        //private static async Task UpdateTelemetry() { //send messages to Arduinos to return latest telemetry data
+            private static void UpdateTelemetry()
+            { //send messages to Arduinos to return latest telemetry data
+
+                //return messages invoke a SerialDataReceivedEventHandler and are processed in "OnSerialReceived"
+
+                //I could have added the methods as delegates to a list and called them withing a loop to 
+                //avoid retyping delay so many times
+            deviceCommands.RequestTemperature();
+            //await Task.Delay(150);
+            deviceCommands.RequestHumidity();
+            //await Task.Delay(150);
+            deviceCommands.RequestMotionSensorState();
+            //await Task.Delay(150);
+            deviceCommands.RequestDoorSensorState();
+            //await Task.Delay(150);
+            deviceCommands.RequestDoorControllerState();
+            //await Task.Delay(150);
+        } //to update telemetry=
 
         private static async Task SendDeviceToCloudMessagesAsync(CancellationToken input_token)
         {
@@ -192,7 +225,8 @@ namespace SimulatedDevice
 
 
                 //perfrom actions here
-
+                UpdateTelemetry();  //update the telemetry data before sending
+                await Task.Delay(TimeSpan.FromSeconds(2));
                 foreach (KeyValuePair<string, object> telemetrydata in telemetryDevicesDict)
                 {
                     //send telemetry from all the connected devices including rpi
@@ -212,6 +246,7 @@ namespace SimulatedDevice
                      #region code to determine the alert level of the telemetry data for routing
 
                     //the dictionary key helps know the correct type cast for the currentTelemetry checking
+
                     if (telemetrydata.Key == temperatueSensor.deviceId && ((TelemetryDataPoint<double>)currentTelemery).property2 > 40)
                     {
                         //if house temperaure reaches 40 degrees celsius
@@ -239,8 +274,9 @@ namespace SimulatedDevice
                         levelValue = messages.warningMessage;
                     }
                     if (telemetrydata.Key == doorSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == false &&
-                        doorController.property2 < 5)
+                        doorController.property2 >= (doorRotMax-10))
                     {
+                        //confirm is false is open
                         //if the contact sensor senses the door open but the servo isnt in an authorized open state
                         //as in the last known servo state was closed
                         infoString = "breach detected at house door, please act immediately";
@@ -313,6 +349,11 @@ namespace SimulatedDevice
                 // await Task.WhenAll(tasks);  //wait for all telemtry to complete
             }
         }
+        private static void InverseStoreClass() //change the classes to what is existing in the dictionary
+            //use sparingly, it doesnt aid modularity
+        {
+
+        }
         private static void OnSerialReceived(object sender, SerialDataReceivedEventArgs e)
         {
             //arduino will send telemetry using the device ID of the updated device
@@ -324,19 +365,27 @@ namespace SimulatedDevice
 
             //read the data from after colon(:) and remove any newline
             //when a device property is changed, set the device state to connected{property1}
+            if(!indata.Contains(';') && !indata.Contains(':'))
+            {
+                return; //ignore all other serial data from the arduinos
+            }
             char[] trimChars = { '\n', '\0' };
             var value = indata.Substring(indata.LastIndexOf(":") + 1).Trim(trimChars);
+            //unboxing was not used due to the "dynamic" type values of the telemetry dictionary
+            //you can infer the type from the Convert.To at the right hand sides, otherwise it is a string
             if (indata.Contains(arduino1.deviceId))
             {
                 arduino1.property1 = true;
                 if (indata.Contains(messages.property2)) {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    arduino1.property2 = Convert.ToBoolean(value);
+                    //arduino1.property2 = Convert.ToBoolean(value);
+                    telemetryDevicesDict[arduino1.deviceId].property2 = Convert.ToBoolean(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    arduino1.Misc = value;
+                    //arduino1.Misc = value;
+                    telemetryDevicesDict[arduino1.deviceId].misc = value;
                 }
                 //I really dont want to put a final else statement
             }
@@ -347,12 +396,14 @@ namespace SimulatedDevice
                 if (indata.Contains(messages.property2))
                 {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    arduino2.property2 = Convert.ToBoolean(value);
+                    //arduino2.property2 = Convert.ToBoolean(value);
+                    telemetryDevicesDict[arduino2.deviceId].property2 = Convert.ToBoolean(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    arduino2.Misc = value;
+                    //arduino2.Misc = value;
+                    telemetryDevicesDict[arduino2.deviceId].misc = value;
                 }
                 //I really dont want to put a final else statement
             }
@@ -362,13 +413,19 @@ namespace SimulatedDevice
                 //respond to possible inputs from this device
                 if (indata.Contains(messages.property2))
                 {
-                    //telemetryDevicesDict[arduino1.deviceId]
-                    temperatueSensor.property2 = Convert.ToDouble(value);
+                    //((TelemetryDataPoint<double>)(telemetryDevicesDict[temperatueSensor.deviceId])).property2 = Convert.ToDouble(value);
+                    telemetryDevicesDict[temperatueSensor.deviceId].property2 = Convert.ToDouble(value);
+
+                    //temperatueSensor.property2 = Convert.ToDouble(value);
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine($"updated Temperature to {telemetryDevicesDict[temperatueSensor.deviceId].property2}");
+
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    temperatueSensor.Misc = value;
+                    //temperatueSensor.Misc = value;
+                    telemetryDevicesDict[temperatueSensor.deviceId].misc = value;
                 }
                 //I really dont want to put a final else statement
             }
@@ -379,12 +436,17 @@ namespace SimulatedDevice
                 if (indata.Contains(messages.property2))
                 {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    humiditySensor.property2 = Convert.ToDouble(value);
+                    //((TelemetryDataPoint<double>)(telemetryDevicesDict[humiditySensor.deviceId])).property2 = Convert.ToDouble(value);
+                    telemetryDevicesDict[humiditySensor.deviceId].property2 = Convert.ToDouble(value);
+                    //humiditySensor.property2 = Convert.ToDouble(value);
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine($"updated Humidity to {telemetryDevicesDict[humiditySensor.deviceId].property2}");
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    humiditySensor.Misc = value;
+                    //humiditySensor.Misc = value;
+                    telemetryDevicesDict[humiditySensor.deviceId].Misc = value;
                 }
                 //I really dont want to put a final else statement
             }
@@ -395,12 +457,14 @@ namespace SimulatedDevice
                 if (indata.Contains(messages.property2))
                 {
                     //"False" or "True"
-                    doorSensor.property2 = Convert.ToBoolean(value);    //true means open
+                    //doorSensor.property2 = Convert.ToBoolean(value);    //true means open
+                    telemetryDevicesDict[doorSensor.deviceId].property2 = Convert.ToBoolean(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    doorSensor.Misc = value;
+                    //doorSensor.Misc = value;
+                    telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;
                 }
                 //I really dont want to put a final else statement
             }
@@ -411,15 +475,17 @@ namespace SimulatedDevice
                 if (indata.Contains(messages.property2))
                 {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    doorController.property2 = Convert.ToDouble(value);
+                    //doorController.property2 = Convert.ToDouble(value);
+                    telemetryDevicesDict[doorController.deviceId].property2 = Convert.ToDouble(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //this is the user's password, the valuse should actually be evaluated from the cloud
-                    doorController.Misc = value;
-                    if (value == "0123" && doorSensor.property2 == true || doorController.property2 == 0) //if door is locked
+                    //doorController.Misc = value;
+                    telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;
+                    if (value == "1346" && doorSensor.property2 == true || doorController.property2 == 0) //if door is locked
                     { _ = deviceCommands.ToggleDoor(); }
-                    else { deviceCommands.WrongDoorCode(); }
+                    else { deviceCommands.LockDoor(); }
                 }
                 //I really dont want to put a final else statement
             }
@@ -430,12 +496,14 @@ namespace SimulatedDevice
                 if (indata.Contains(messages.property2))
                 {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    motionSensor.property2 = Convert.ToBoolean(value);
+                    //motionSensor.property2 = Convert.ToBoolean(value);
+                    telemetryDevicesDict[motionSensor.deviceId].property2 = Convert.ToBoolean(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    motionSensor.Misc = value;
+                    //motionSensor.Misc = value;
+                    telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;
                 }
                 //I really dont want to put a final else statement
             }
@@ -446,12 +514,14 @@ namespace SimulatedDevice
                 if (indata.Contains(messages.property2))
                 {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    light1.property2 = Convert.ToBoolean(value);
+                    //light1.property2 = Convert.ToBoolean(value);
+                    telemetryDevicesDict[light1.deviceId].property2 = Convert.ToBoolean(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    light1.Misc = value;
+                    //light1.Misc = value;
+                    telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;
                 }
                 //I really dont want to put a final else statement
             }
@@ -462,28 +532,32 @@ namespace SimulatedDevice
                 if (indata.Contains(messages.property2))
                 {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    light2.property2 = Convert.ToBoolean(value);
+                    //light2.property2 = Convert.ToBoolean(value);
+                    telemetryDevicesDict[light2.deviceId].property2 = Convert.ToBoolean(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    light2.Misc = value;
+                    //light2.Misc = value;
+                    telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;
                 }
                 //I really dont want to put a final else statement
             }
-            else if (indata.Contains(motionSensor.deviceId))
+            else if (indata.Contains(extension.deviceId))
             {
                 motionSensor.property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
                     //telemetryDevicesDict[arduino1.deviceId]
-                    motionSensor.property2 = Convert.ToBoolean(value);
+                    //extension.property2 = Convert.ToBoolean(value);
+                    telemetryDevicesDict[extension.deviceId].property2 = Convert.ToBoolean(value);
                 }
                 else if (indata.Contains(messages.misc))
                 {
                     //"False" or "True"
-                    light2.Misc = value;    //arduino should not write to this directly
+                    //light2.Misc = value;    //arduino should not write to this directly
+                    telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;       //arduino should not write to this directly
                 }
                 //I really dont want to put a final else statement
             }
