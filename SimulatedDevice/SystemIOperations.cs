@@ -28,10 +28,11 @@ namespace SimulatedDevice
             }
             else if (OperatingSystem.IsWindows())
             {
-                //I cant confirm that the com ports here will work for everybody
+                //windows is for testing puroses, you should confirm thr port labels on our device from the Arduino IDE or others
+                //as the labels wont be same for everybody
                 Console.WriteLine("We're on WIndows!");
-                ard1Port = new SerialPort("COM7", 9600);
-                ard2Port = new SerialPort("COM10", 9600);
+                ard1Port = new SerialPort("COM8", 9600);
+                ard2Port = new SerialPort("COM9", 9600);
                 //ard1Port = new SerialPort("COM8", 9600);
                 //ard2Port = new SerialPort("COM14", 9600);
             }

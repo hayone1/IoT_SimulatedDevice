@@ -76,14 +76,24 @@ namespace SimulatedDevice
             if (receivedMsg.Contains("ID:"))    //Id will come in the format of "ID:<userIdWithoutParenthesis>;userPhoneNo
             {
                 Console.WriteLine("received ID from client" + receivedMsg);
+                //the ID chosen is the mail of the client, I intentionally made it start from ':'
+                //so it reflects as the ID when appended to the devices RowKey in the telemetry data
                 var iDstartIndex = receivedMsg.IndexOf(':');
                 //Console.WriteLine("index start is:" + iDstartIndex);
                 var numberstartIndex = receivedMsg.LastIndexOf(';');
                 //Console.WriteLine("index end is:" + numberstartIndex);
-                int iDlength = numberstartIndex - iDstartIndex + 1; //the id lies between the 2 symbols
-
+                int iDlength = numberstartIndex - iDstartIndex; //the id lies between the 2 symbols
+                //int iDlength = numberstartIndex - iDstartIndex + 1; //the id lies between the 2 symbols
                 //the id lies between the 2 symbols
                 recievedClientID = receivedMsg.Substring(startIndex: iDstartIndex, length: iDlength);  //read the client ID
+                if (!recievedClientID.Contains('@'))    //if the mail is invalid
+                {
+                    var _exception = new InvalidDataException();
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    Console.Error.WriteLine(_exception + " \ninvalid user email provided: " + recievedClientID);
+                    Console.ForegroundColor = ConsoleColor.White;
+                    //throw new InvalidDataException().;
+                }
                 recievedClientNumber = receivedMsg.Substring(startIndex: numberstartIndex + 1);  //read the client phone number
 
                 //at the stage, the main program uses this ID to alter the devices "row" info

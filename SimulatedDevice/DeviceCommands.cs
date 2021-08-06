@@ -74,10 +74,9 @@ namespace SimulatedDevice
         }
         internal  Task<MethodResponse> TogglePresenceMode(MethodRequest methodRequest = null, object userContext = null)
         {
-            //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
-            //toggle the presence Mode //if hell
+            //does nothing for now, can be expanded on in future
 
-            serialOPerations.SendSerial("62", $"{messages.myard1};{Program.motionSensor.Misc}");
+            serialOPerations.SendSerial("72", $"{messages.myard1};{Program.motionSensor.Misc}");
             Program.motionSensor.Misc = Program.motionSensor.Misc == messages.awayMode ? messages.homeMode : messages.awayMode;
             string result = $"{{\"result\":\"Executed direct method: {methodRequest.Name}\"}}";
             Console.ForegroundColor = ConsoleColor.DarkGreen;
@@ -87,9 +86,8 @@ namespace SimulatedDevice
         }
         internal  Task<MethodResponse> ToggleMotionSensor(MethodRequest methodRequest = null, object userContext = null)
         {
-            //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
-            //toggle the motion sensor
-            serialOPerations.SendSerial("32", $"{messages.myard1};{Program.motionSensor.deviceId}");
+            //this currrently wont do anything but can be implemented somehow in the future
+            serialOPerations.SendSerial("52", $"{messages.myard1};{Program.motionSensor.deviceId}");
             Program.motionSensor.property2 = !(Program.motionSensor.property2);
             string result = $"{{\"result\":\"Executed direct method: {methodRequest.Name}\"}}";
             Console.ForegroundColor = ConsoleColor.DarkGreen;
@@ -153,9 +151,8 @@ namespace SimulatedDevice
         }
         internal  Task<MethodResponse> ToggleExtension(MethodRequest methodRequest = null, object userContext = null)
         {
-            //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
-            //signal the arduino to close the door
-            serialOPerations.SendSerial("52", $"{messages.myard1};{Program.extension.deviceId}");
+            //also doesnt do anything but can be expanded upon later on
+            serialOPerations.SendSerial("62", $"{messages.myard1};{Program.extension.deviceId}");
             Program.extension.property2 = !Program.extension.property2;
 
             string result = $"{{\"result\":\"Executed direct method: {methodRequest.Name}\"}}";

@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.Devices.Client.Exceptions;
+using System.IO;
 using System.IO.Ports;
 
 
@@ -95,6 +96,7 @@ namespace SimulatedDevice
                     Console.WriteLine("waiting to recieve client ID");
                     var cancelled = LocalNetworkHandler.waitCts.Token.WaitHandle.WaitOne(Timeout.InfiniteTimeSpan); //wait for device to respond
                 }
+                //control flowish coming from LocalNetworkHandler
                 if (!string.IsNullOrEmpty(LocalNetworkHandler.recievedClientID))    //if ID was successfully received
                 {
                     //create a temporary dictionary to access the telemetry base class data
@@ -108,7 +110,7 @@ namespace SimulatedDevice
                         tempDevicesDict[_telemetryData.Key].RowKey = tempDevicesDict[_telemetryData.Key].RowKey + LocalNetworkHandler.recievedClientID;
                         //altering the values in tempDeviceDick also alters it in the original telemetryDevicesDict
                     }
-                    /* Very important piece of code here to get the user's phone number to the cloud
+                    /* VERY IMPORTANT piece of code here to get the user's phone number to the cloud
                      twilo SMS service depends on this to work*/
                     UserDetails.property2 = LocalNetworkHandler.recievedClientNumber;   //set this so it can be stored on the azure table storage
 
@@ -125,7 +127,13 @@ namespace SimulatedDevice
                 }
                 else
                 {
-                    Console.Error.WriteLine("Code error occured, client ID invalid");
+                    //Console.Error.WriteLine("Code error occured, client ID invalid");
+                    var _exception = new InvalidDataException();
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    Console.Error.WriteLine("invalid user ID provided: " + _exception);
+                    Console.ForegroundColor = ConsoleColor.White;
+                    _ = Main(); //restart the application on another thread (fire and forget)
+                    return;
                 }
             }
             else
@@ -253,7 +261,7 @@ namespace SimulatedDevice
                         infoString = "House Temperature is reaching undesirable levels: " + ((TelemetryDataPoint<double>)currentTelemery).property2;
                         levelValue = messages.warningMessage;
                     }
-                    if (telemetrydata.Key == humiditySensor.deviceId && ((TelemetryDataPoint<double>)currentTelemery).property2 > 45)
+                    if (telemetrydata.Key == humiditySensor.deviceId && ((TelemetryDataPoint<double>)currentTelemery).property2 > 55)
                     {
                         //if house temperaure reaches 40 degrees celsius
                         infoString = "House Humidity is reaching undesirable levels: " + ((TelemetryDataPoint<double>)currentTelemery).property2;
@@ -266,28 +274,30 @@ namespace SimulatedDevice
                         infoString = "possible intruder detected inside home, please check immediately";
                         levelValue = messages.criticalMessage;
                     }
-                    if (telemetrydata.Key == doorSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == false &&
-                        raspBerryPi.Misc == messages.sleepMode)
-                    {
+                    if (telemetrydata.Key == doorSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == true &&
+                        telemetryDevicesDict[raspBerryPi.deviceId].Misc == messages.sleepMode)
+                    {   //I hope the dunamism works
                         //if the contact sensor senses the door open but the house is in sleep mode
                         infoString = "The front door has been left open";
                         levelValue = messages.warningMessage;
                     }
-                    if (telemetrydata.Key == doorSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == false &&
-                        doorController.property2 >= (doorRotMax-10))
+                    if (telemetrydata.Key == doorSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == true &&
+                        doorController.property2 > (doorRotMin+100) && telemetryDevicesDict[doorSensor.deviceId].property2 == true)    //+50 incase I change some range in arduin code
                     {
                         //confirm is false is open
-                        //if the contact sensor senses the door open but the servo isnt in an authorized open state
+                        //if the contact sensor senses the door open but the servo isnt in an authorized open state(locked)
                         //as in the last known servo state was closed
+                        //and the door sensor senses the door as open
                         infoString = "breach detected at house door, please act immediately";
                         levelValue = messages.criticalMessage;
                     }
                     #endregion
 
-
+                    //the if statements are arranged arbitrarily but can be ordered by some scheme
                     message.Properties.Add("level", levelValue);
                     message.Properties.Add("info", infoString);
-                    //also append the message to UserDetails so that Azure functions can detect and send SMS if necessary
+                    //also append the latest message to UserDetails so that Azure functions can detect and send SMS if necessary
+                   
                     UserDetails.Misc = $"{levelValue}:{infoString}";    
                     // add message routing rules.
                     // Add one property to the message.
@@ -375,7 +385,7 @@ namespace SimulatedDevice
             //you can infer the type from the Convert.To at the right hand sides, otherwise it is a string
             if (indata.Contains(arduino1.deviceId))
             {
-                arduino1.property1 = true;
+                telemetryDevicesDict[arduino1.deviceId].property1 = true;
                 if (indata.Contains(messages.property2)) {
                     //telemetryDevicesDict[arduino1.deviceId]
                     //arduino1.property2 = Convert.ToBoolean(value);
@@ -391,7 +401,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(arduino2.deviceId))
             {
-                arduino2.property1 = true;
+                telemetryDevicesDict[arduino2.deviceId].property1 = true;
                 //respond to possible inputs from this device
                 if (indata.Contains(messages.property2))
                 {
@@ -409,7 +419,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(temperatueSensor.deviceId))
             {
-                temperatueSensor.property1 = true;
+                telemetryDevicesDict[temperatueSensor.deviceId].property1 = true;
                 //respond to possible inputs from this device
                 if (indata.Contains(messages.property2))
                 {
@@ -431,7 +441,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(humiditySensor.deviceId))
             {
-                humiditySensor.property1 = true;
+                telemetryDevicesDict[humiditySensor.deviceId].property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
@@ -452,7 +462,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(doorSensor.deviceId))
             {
-                doorSensor.property1 = true;
+                telemetryDevicesDict[doorSensor.deviceId].property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
@@ -470,7 +480,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(doorController.deviceId))
             {
-                doorController.property1 = true;
+                telemetryDevicesDict[doorController.deviceId].property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
@@ -483,7 +493,8 @@ namespace SimulatedDevice
                     //this is the user's password, the valuse should actually be evaluated from the cloud
                     //doorController.Misc = value;
                     telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;
-                    if (value == "1346" && doorSensor.property2 == true || doorController.property2 == 0) //if door is locked
+                    //
+                    if (value == "1569" && doorSensor.property2 == true || doorController.property2 > (doorRotMin + 50)) //if door is locked
                     { _ = deviceCommands.ToggleDoor(); }
                     else { deviceCommands.LockDoor(); }
                 }
@@ -491,7 +502,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(motionSensor.deviceId))
             {
-                motionSensor.property1 = true;
+                telemetryDevicesDict[motionSensor.deviceId].property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
@@ -509,7 +520,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(light1.deviceId))
             {
-                light1.property1 = true;
+                telemetryDevicesDict[light1.deviceId].property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
@@ -527,7 +538,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(light2.deviceId))
             {
-                light2.property1 = true;
+                telemetryDevicesDict[light2.deviceId].property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
@@ -545,7 +556,7 @@ namespace SimulatedDevice
             }
             else if (indata.Contains(extension.deviceId))
             {
-                motionSensor.property1 = true;
+                telemetryDevicesDict[extension.deviceId].property1 = true;
                 //respond to possible inputs from this ard
                 if (indata.Contains(messages.property2))
                 {
