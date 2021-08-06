@@ -228,7 +228,9 @@ namespace SimulatedDevice
             {
 
                 string infoString = "this is a normal message";
+                string defaultinfoString = "this is a normal message";
                 string levelValue = "normal";
+                string defaultlevelValue = "normal";
 
 
 
@@ -290,6 +292,11 @@ namespace SimulatedDevice
                         //and the door sensor senses the door as open
                         infoString = "breach detected at house door, please act immediately";
                         levelValue = messages.criticalMessage;
+                    }
+                    else
+                    {   //if there are no alerts
+                        infoString = defaultinfoString;
+                        levelValue = defaultlevelValue;
                     }
                     #endregion
 
