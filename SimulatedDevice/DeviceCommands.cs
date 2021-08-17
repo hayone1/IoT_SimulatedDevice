@@ -116,15 +116,17 @@ namespace SimulatedDevice
         {
             //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
             //signal the arduino to open/close the door, make the lcd always signify what's going on
-            if (Program.doorSensor.property2 == true || Program.doorController.property2 > 5) //if door is opened
+            if (Program.doorSensor.property2 == false || Program.doorController.property2 < (Program.doorRotMax - 50)) //if door is opened
             {
-            serialOPerations.SendSerial("40", $"{messages.myard2};{Program.doorController.deviceId}");  //close it
+                /*< (Program.doorRotMax - 50) if the angle is less than the lock angle(opened) with allowance of
+                50 in case I later change some things in the arcuino code*/
+                LockDoor();
             }
             else
             {
-                serialOPerations.SendSerial("41", $"{messages.myard2};{Program.doorController.deviceId}");  //open it
+                UnlockDoor();
             }
-            Program.doorController.property2 = Program.doorController.property2 == 90 ? 0 : 90;
+            //Program.doorController.property2 = Program.doorController.property2 == 175 ? 45 : 175;
 
             string result = $"{{\"result\":\"Executed direct method: {methodRequest.Name}\"}}";
             Console.ForegroundColor = ConsoleColor.DarkGreen;
@@ -136,18 +138,21 @@ namespace SimulatedDevice
         {
             //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
             //signal the arduino to open/close the door, make the lcd always signify what's going on
-            serialOPerations.SendSerial("40", $"{messages.myard2};{Program.doorController.deviceId}");
-            Program.doorController.property2 = 0;   //should be zero after
+            LockDoor();
 
             Console.ForegroundColor = ConsoleColor.DarkGreen;
             Console.WriteLine("Force close door");
             Console.ForegroundColor = ConsoleColor.White;
 
+            if (methodRequest != null)
+            {
             string result = $"{{\"result\":\"Executed direct method: {methodRequest.Name}\"}}";
             Console.ForegroundColor = ConsoleColor.DarkGreen;
             Console.WriteLine(result);
             Console.ForegroundColor = ConsoleColor.White;
             return Task.FromResult(new MethodResponse(Encoding.UTF8.GetBytes(result), 200));
+            }
+            return null;
         }
         internal  Task<MethodResponse> ToggleExtension(MethodRequest methodRequest = null, object userContext = null)
         {
@@ -178,12 +183,36 @@ namespace SimulatedDevice
         {
             //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
             //signal the arduino to open/close the door, make the lcd always signify what's going on
-            serialOPerations.SendSerial("40", $"{messages.myard2};{Program.doorController.deviceId}");
-            Program.doorController.property2 = 0;   //should be zero after
+            LockDoor();
 
             Console.ForegroundColor = ConsoleColor.DarkGreen;
-            Console.WriteLine("Force close door");
+            Console.WriteLine("wrong password, Force close door");
             Console.ForegroundColor = ConsoleColor.White;
+        }
+        internal void ToggleDoor()
+        {
+            //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
+            //signal the arduino to open/close the door, make the lcd always signify what's going on
+            if (Program.doorSensor.property2 == true || Program.doorController.property2 > 5) //if door is opened
+            {
+                serialOPerations.SendSerial("40", $"{messages.myard2};{Program.doorController.deviceId}");  //close it
+            }
+            else
+            {
+                serialOPerations.SendSerial("41", $"{messages.myard2};{Program.doorController.deviceId}");  //open it
+            }
+            Program.doorController.property2 = Program.doorController.property2 == 175 ? 45 : 175;
+
+        }
+        internal void LockDoor()    //made this regular method for performance reasons
+        {
+            serialOPerations.SendSerial("40", $"{messages.myard2};{Program.doorController.deviceId}");
+            Program.doorController.property2 = Program.doorRotMax;   //should be zero after
+        }
+        internal void UnlockDoor()//made this regular method for performance reasons
+        {
+            serialOPerations.SendSerial("41", $"{messages.myard2};{Program.doorController.deviceId}");  //open it
+            Program.doorController.property2 = Program.doorRotMin;   //should be zero after
         }
         #endregion
 

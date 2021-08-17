@@ -23,7 +23,7 @@ namespace SimulatedDevice
 
 
         private static readonly string RpiConnectionString = "HostName=FinalYearHub.azure-devices.net;DeviceId=RaspberryPi;SharedAccessKey=rwforzwg0XC7eZpARG0bKD+mjoBkX6ebvEOQ26w2RIA=";
-        private static TimeSpan telemetryInterval = TimeSpan.FromSeconds(30);
+        private static TimeSpan telemetryInterval = TimeSpan.FromSeconds(35);
         private static string telemetryDataString;
         //create devices connected to raspberry pi including raspberry pi
         //private static readonly string RpiConnectionString = "HostName=FinalYearHub.azure-devices.net;DeviceId=MyDotnetDevice;SharedAccessKey=c/HyNUWA04EyjH5wdfpOuY4PtlCG+gI3BMuqARb7kww=";
@@ -43,8 +43,12 @@ namespace SimulatedDevice
         internal static TelemetryDataPoint<string> UserDetails = new TelemetryDataPoint<string>("UserID", "userdetails123", messages.myuserdetails, "connected", "phoneno", false, s_property2: "+15005550006", $"{messages.normalMessage}:this is a normal message");   //initialized using magic number
 
         //the angles between which the door operates
-        internal static int doorRotMin = 45;
-        internal static int doorRotMax = 175;
+        internal static int doorRotMin = 45;    //open   angle
+        internal static int doorRotMax = 175;   //closed angle
+        private static string infoString = "this is a normal message";
+        private static string levelValue = "normal";
+        private static string defaultinfoString = "this is a normal message";
+        private static string defaultlevelValue = "normal";
 
         //add the devices to list
         //private static List<TelemetryDataPoint> telemetryDevices = new List<TelemetryDataPoint>
@@ -71,8 +75,10 @@ namespace SimulatedDevice
         private static MqttHandler LocalNetworkHandler = new MqttHandler();
         internal static SystemIOperations serialOPerations = new SystemIOperations(OnSerialReceived);  //to communicate with the arduinos over serial
         private static DeviceCommands deviceCommands = new DeviceCommands(serialOPerations);    //methods to handle serial commands from cloud
-        private static int motionSensorCalibrationDelay = 58;   //wit time for motion sensor to properly calibrate
+        private static int motionSensorCalibrationDelay = 5;   //wit time for motion sensor to properly calibrate
         //work on storing devices file to use on startup and test auth with mqttX
+        private static int testMessageCount = 0;    //for testing in case alerts arent sent through normal alert
+        private static int testMessageactivationThreshold = 50;
         public static async Task Main()
         {
             Stopwatch stopwatch = new Stopwatch();  //stop watch is to account for the motion sensor starting time
@@ -94,7 +100,9 @@ namespace SimulatedDevice
                     //when system received ID
                     Console.ForegroundColor = ConsoleColor.DarkYellow;
                     Console.WriteLine("waiting to recieve client ID");
-                    var cancelled = LocalNetworkHandler.waitCts.Token.WaitHandle.WaitOne(Timeout.InfiniteTimeSpan); //wait for device to respond
+                    await Task.Delay(TimeSpan.FromSeconds(7));
+                    LocalNetworkHandler.ReBroadcastID(raspBerryPi.PartitionKey);    //rebroadcast ID every 10 secs
+                    //var cancelled = LocalNetworkHandler.waitCts.Token.WaitHandle.WaitOne(Timeout.InfiniteTimeSpan); //wait for device to respond
                 }
                 //control flowish coming from LocalNetworkHandler
                 if (!string.IsNullOrEmpty(LocalNetworkHandler.recievedClientID))    //if ID was successfully received
@@ -107,8 +115,12 @@ namespace SimulatedDevice
                         tempDevicesDict.Add(_telemetryData.Key, ((TelemetryData)_telemetryData.Value));
                         /*concatenate rowkey of the TelemetryData to include the clientID
                         hopefully all the boxing, unboxing and passing around of telemetry data is done by reference and no copying is happening*/
+                        //adds email to rowkey
                         tempDevicesDict[_telemetryData.Key].RowKey = tempDevicesDict[_telemetryData.Key].RowKey + LocalNetworkHandler.recievedClientID;
-                        //altering the values in tempDeviceDick also alters it in the original telemetryDevicesDict
+                        //altering the values in tempDeviceDict also alters it in the original telemetryDevicesDict
+                        //adds facebook received tken id to partition key
+                        tempDevicesDict[_telemetryData.Key].PartitionKey = tempDevicesDict[_telemetryData.Key].PartitionKey + LocalNetworkHandler.recievedPartitionKeyID;
+
                     }
                     /* VERY IMPORTANT piece of code here to get the user's phone number to the cloud
                      twilo SMS service depends on this to work*/
@@ -228,9 +240,12 @@ namespace SimulatedDevice
             {
 
                 string infoString = "this is a normal message";
-                string defaultinfoString = "this is a normal message";
                 string levelValue = "normal";
-                string defaultlevelValue = "normal";
+                //string defaultinfoString = "this is a normal message";
+                //string defaultlevelValue = "normal";
+
+                //infoString = "testing critical message";
+                //levelValue = "critical";
 
 
 
@@ -256,48 +271,63 @@ namespace SimulatedDevice
                      #region code to determine the alert level of the telemetry data for routing
 
                     //the dictionary key helps know the correct type cast for the currentTelemetry checking
+                    if (telemetrydata.Key == UserDetails.deviceId)
+                    {
+                        if (telemetryDevicesDict[temperatueSensor.deviceId].property2 > 40)
+                        {
+                            //if house temperaure reaches 40 degrees celsius
+                            infoString = "House Temperature is reaching undesirable levels: " + telemetryDevicesDict[temperatueSensor.deviceId].property2;
+                            levelValue = messages.warningMessage;
+                        }
+                        else if (telemetryDevicesDict[humiditySensor.deviceId].property2 > 55)
+                        {
+                            //if house temperaure reaches 40 degrees celsius
+                            infoString = "House Humidity is reaching undesirable levels: " + telemetryDevicesDict[humiditySensor.deviceId].property2;
+                            levelValue = messages.warningMessage;
+                        }
+                        else if (telemetryDevicesDict[motionSensor.deviceId].property2 == true &&
+                            telemetryDevicesDict[temperatueSensor.deviceId].Misc == messages.awayMode)
+                        {
+                            //if the motion sensor is triggered and home owner is away(indicated by misc)
+                            infoString = "possible intruder detected inside home, please check immediately";
+                            levelValue = messages.criticalMessage;
+                        }
+                        else if (telemetryDevicesDict[doorSensor.deviceId].property2 == true &&
+                            telemetryDevicesDict[raspBerryPi.deviceId].Misc == messages.sleepMode)
+                        {   //I hope the dunamism works
+                            //if the contact sensor senses the door open but the house is in sleep mode
+                            infoString = "The front door has been left open";
+                            levelValue = messages.warningMessage;
+                        }
+                        else if (telemetryDevicesDict[doorSensor.deviceId].property2 == true &&
+                            telemetryDevicesDict[doorController.deviceId].property2 > (doorRotMin + 100) && telemetryDevicesDict[doorSensor.deviceId].property2 == true)    //+50 incase I change some range in arduin code
+                        {
+                            //confirm is false is open
+                            //if the contact sensor senses the door open but the servo isnt in an authorized open state(locked)
+                            //as in the last known servo state was closed
+                            //and the door sensor senses the door as open
+                            infoString = "breach detected at house door, please act immediately";
+                            levelValue = messages.criticalMessage;
+                        }
+                        else
+                        {   //if there are no alerts
+                            infoString = defaultinfoString;
+                            levelValue = defaultlevelValue;
+                        }
 
-                    if (telemetrydata.Key == temperatueSensor.deviceId && ((TelemetryDataPoint<double>)currentTelemery).property2 > 40)
-                    {
-                        //if house temperaure reaches 40 degrees celsius
-                        infoString = "House Temperature is reaching undesirable levels: " + ((TelemetryDataPoint<double>)currentTelemery).property2;
+                    }
+
+                    
+                    //for testing purposes to send alerts id nothing else triggers an alert
+                    if (testMessageCount >= testMessageactivationThreshold)
+                    {   //use test warning instead
+                        infoString = "Morawo testing Finalyear App, both lights are on";
                         levelValue = messages.warningMessage;
+                        testMessageCount = 0;
                     }
-                    if (telemetrydata.Key == humiditySensor.deviceId && ((TelemetryDataPoint<double>)currentTelemery).property2 > 55)
-                    {
-                        //if house temperaure reaches 40 degrees celsius
-                        infoString = "House Humidity is reaching undesirable levels: " + ((TelemetryDataPoint<double>)currentTelemery).property2;
-                        levelValue = messages.warningMessage;
-                    }
-                    if (telemetrydata.Key == motionSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == true && 
-                        ((TelemetryDataPoint<bool>)currentTelemery).Misc == messages.awayMode)
-                    {
-                        //if the motion sensor is triggered and home owner is away(indicated by misc)
-                        infoString = "possible intruder detected inside home, please check immediately";
-                        levelValue = messages.criticalMessage;
-                    }
-                    if (telemetrydata.Key == doorSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == true &&
-                        telemetryDevicesDict[raspBerryPi.deviceId].Misc == messages.sleepMode)
-                    {   //I hope the dunamism works
-                        //if the contact sensor senses the door open but the house is in sleep mode
-                        infoString = "The front door has been left open";
-                        levelValue = messages.warningMessage;
-                    }
-                    if (telemetrydata.Key == doorSensor.deviceId && ((TelemetryDataPoint<bool>)currentTelemery).property2 == true &&
-                        doorController.property2 > (doorRotMin+100) && telemetryDevicesDict[doorSensor.deviceId].property2 == true)    //+50 incase I change some range in arduin code
-                    {
-                        //confirm is false is open
-                        //if the contact sensor senses the door open but the servo isnt in an authorized open state(locked)
-                        //as in the last known servo state was closed
-                        //and the door sensor senses the door as open
-                        infoString = "breach detected at house door, please act immediately";
-                        levelValue = messages.criticalMessage;
-                    }
-                    else
-                    {   //if there are no alerts
-                        infoString = defaultinfoString;
-                        levelValue = defaultlevelValue;
-                    }
+                    testMessageCount++;
+
+                    telemetryDevicesDict[UserDetails.deviceId].Misc = $"{levelValue}:{infoString}";    
                     #endregion
 
                     //the if statements are arranged arbitrarily but can be ordered by some scheme
@@ -305,7 +335,6 @@ namespace SimulatedDevice
                     message.Properties.Add("info", infoString);
                     //also append the latest message to UserDetails so that Azure functions can detect and send SMS if necessary
                    
-                    UserDetails.Misc = $"{levelValue}:{infoString}";    
                     // add message routing rules.
                     // Add one property to the message.
                     /*all messages are sent to SERVICEBUSQUEUE for processing by azure function and storge
@@ -369,9 +398,21 @@ namespace SimulatedDevice
         private static void InverseStoreClass() //change the classes to what is existing in the dictionary
             //use sparingly, it doesnt aid modularity
         {
+            raspBerryPi = telemetryDevicesDict[raspBerryPi.deviceId];
+            arduino1 = telemetryDevicesDict[arduino1.deviceId];
+            arduino2 = telemetryDevicesDict[arduino2.deviceId];
+            temperatueSensor = telemetryDevicesDict[temperatueSensor.deviceId];
+            humiditySensor = telemetryDevicesDict[humiditySensor.deviceId];
+            doorSensor = telemetryDevicesDict[doorSensor.deviceId];
+            doorController = telemetryDevicesDict[doorController.deviceId];
+            motionSensor = telemetryDevicesDict[motionSensor.deviceId];
+            light1 = telemetryDevicesDict[light1.deviceId];
+            light2 = telemetryDevicesDict[light2.deviceId];
+            extension = telemetryDevicesDict[extension.deviceId];
+            UserDetails = telemetryDevicesDict[UserDetails.deviceId];
 
         }
-        private static void OnSerialReceived(object sender, SerialDataReceivedEventArgs e)
+        private static void OnSerialReceived(object sender, SerialDataReceivedEventArgs e)  
         {
             //arduino will send telemetry using the device ID of the updated device
             //and the parameter label of the telemetry it is sending
@@ -501,9 +542,19 @@ namespace SimulatedDevice
                     //doorController.Misc = value;
                     telemetryDevicesDict[temperatueSensor.deviceId].Misc = value;
                     //
-                    if (value == "1569" && doorSensor.property2 == true || doorController.property2 > (doorRotMin + 50)) //if door is locked
-                    { _ = deviceCommands.ToggleDoor(); }
-                    else { deviceCommands.LockDoor(); }
+                    if (value.Contains("369B")) //if door is locked
+                    {
+                        deviceCommands.UnlockDoor();
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        Console.WriteLine("PassCode correct: "+ value);
+                        Console.ForegroundColor = ConsoleColor.White;
+                    }
+                    else { 
+                        deviceCommands.WrongDoorCode();
+                        Console.ForegroundColor = ConsoleColor.DarkRed;
+                        Console.WriteLine("PassCode incorrect");
+                        Console.ForegroundColor = ConsoleColor.White;
+                    }
                 }
                 //I really dont want to put a final else statement
             }

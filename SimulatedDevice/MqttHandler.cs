@@ -23,7 +23,8 @@ namespace SimulatedDevice
         MqttClient client = new MqttClient("raspberrypi");
         string subscriptionTopic = "Rpi/Request/AuthControl";
         string SendTopic = "device/startup/broadcast";
-        internal string recievedClientID = string.Empty;
+        internal string recievedClientID = string.Empty;    //this is Email
+        internal string recievedPartitionKeyID = string.Empty;
         internal string recievedClientNumber = string.Empty;
         public CancellationTokenSource waitCts;
         JsonSerializerSettings jsonSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
@@ -70,22 +71,34 @@ namespace SimulatedDevice
 
             waitCts = new CancellationTokenSource();
         }
+        internal void ReBroadcastID(string _deviceType)
+        {
+            //send device id
+            string sendMsg = "deviceType:" + _deviceType;
+            client.Publish(SendTopic, Encoding.UTF8.GetBytes(sendMsg), MqttMsgBase.QOS_LEVEL_AT_LEAST_ONCE, false);
+
+            //waitCts = new CancellationTokenSource();
+        }
         void client_MqttMsgReceived(object sender, MqttMsgPublishEventArgs e)
         {
             string receivedMsg = Encoding.UTF8.GetString(e.Message);
-            if (receivedMsg.Contains("ID:"))    //Id will come in the format of "ID:<userIdWithoutParenthesis>;userPhoneNo
+            if (receivedMsg.Contains("ID|"))    //Id will come in the format of "ID:<userIdWithoutParenthesis>;userPhoneNo
             {
                 Console.WriteLine("received ID from client" + receivedMsg);
                 //the ID chosen is the mail of the client, I intentionally made it start from ':'
                 //so it reflects as the ID when appended to the devices RowKey in the telemetry data
-                var iDstartIndex = receivedMsg.IndexOf(':');
-                //Console.WriteLine("index start is:" + iDstartIndex);
+                var partitionStartIndex = receivedMsg.IndexOf('|') + 1;    //starting from ':' is intentional
+                var iDstartIndex = receivedMsg.IndexOf(':');    //starting from ':' is intentional as I want the sign included in the payload
+                //using iDstartIndex as ":" also eliminated the need to put +1 in the PartitioniDlength
+                int PartitioniDlength = iDstartIndex - partitionStartIndex;
                 var numberstartIndex = receivedMsg.LastIndexOf(';');
-                //Console.WriteLine("index end is:" + numberstartIndex);
+                //using numberstartIndex as ";" eliminated the need to put +1 in the iDlength
                 int iDlength = numberstartIndex - iDstartIndex; //the id lies between the 2 symbols
+                //Console.WriteLine("index start is:" + iDstartIndex);
                 //int iDlength = numberstartIndex - iDstartIndex + 1; //the id lies between the 2 symbols
                 //the id lies between the 2 symbols
                 recievedClientID = receivedMsg.Substring(startIndex: iDstartIndex, length: iDlength);  //read the client ID
+                recievedPartitionKeyID = receivedMsg.Substring(startIndex: partitionStartIndex, length: PartitioniDlength);
                 if (!recievedClientID.Contains('@'))    //if the mail is invalid
                 {
                     var _exception = new InvalidDataException();
