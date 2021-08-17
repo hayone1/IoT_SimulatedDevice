@@ -116,7 +116,7 @@ namespace SimulatedDevice
         {
             //string data = Encoding.UTF8.GetString(methodRequest.Data); //the data is the payload, the arguement of the methood
             //signal the arduino to open/close the door, make the lcd always signify what's going on
-            if (Program.doorSensor.property2 == false || Program.doorController.property2 < (Program.doorRotMax - 50)) //if door is opened
+            if (Program.doorSensor.property2 == true || Program.doorController.property2 < (Program.doorRotMax - 50)) //if door is opened
             {
                 /*< (Program.doorRotMax - 50) if the angle is less than the lock angle(opened) with allowance of
                 50 in case I later change some things in the arcuino code*/

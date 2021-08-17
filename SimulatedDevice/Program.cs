@@ -273,7 +273,24 @@ namespace SimulatedDevice
                     //the dictionary key helps know the correct type cast for the currentTelemetry checking
                     if (telemetrydata.Key == UserDetails.deviceId)
                     {
-                        if (telemetryDevicesDict[temperatueSensor.deviceId].property2 > 40)
+                        if (telemetryDevicesDict[doorSensor.deviceId].property2 == true &&
+                            telemetryDevicesDict[doorController.deviceId].property2 > (doorRotMin + 100))    //+50 incase I change some range in arduin code
+                        {
+                            //confirm is false is open
+                            //if the contact sensor senses the door open but the servo isnt in an authorized open state(locked)
+                            //as in the last known servo state was closed
+                            //and the door sensor senses the door as open
+                            infoString = "breach detected at house door, please act immediately";
+                            levelValue = messages.criticalMessage;
+                        }
+                        else if (telemetryDevicesDict[motionSensor.deviceId].property2 == true &&
+                            telemetryDevicesDict[temperatueSensor.deviceId].Misc == messages.awayMode)
+                        {
+                            //if the motion sensor is triggered and home owner is away(indicated by misc)
+                            infoString = "possible intruder detected inside home, please check immediately";
+                            levelValue = messages.criticalMessage;
+                        }
+                        else if (telemetryDevicesDict[temperatueSensor.deviceId].property2 > 40)
                         {
                             //if house temperaure reaches 40 degrees celsius
                             infoString = "House Temperature is reaching undesirable levels: " + telemetryDevicesDict[temperatueSensor.deviceId].property2;
@@ -285,30 +302,14 @@ namespace SimulatedDevice
                             infoString = "House Humidity is reaching undesirable levels: " + telemetryDevicesDict[humiditySensor.deviceId].property2;
                             levelValue = messages.warningMessage;
                         }
-                        else if (telemetryDevicesDict[motionSensor.deviceId].property2 == true &&
-                            telemetryDevicesDict[temperatueSensor.deviceId].Misc == messages.awayMode)
-                        {
-                            //if the motion sensor is triggered and home owner is away(indicated by misc)
-                            infoString = "possible intruder detected inside home, please check immediately";
-                            levelValue = messages.criticalMessage;
-                        }
-                        else if (telemetryDevicesDict[doorSensor.deviceId].property2 == true &&
+                        else if (telemetryDevicesDict[doorController.deviceId].property2 == doorRotMax &&
                             telemetryDevicesDict[raspBerryPi.deviceId].Misc == messages.sleepMode)
-                        {   //I hope the dunamism works
-                            //if the contact sensor senses the door open but the house is in sleep mode
+                        {   //I hope the dynamism works
+                            //if the doorController identifies the door as open but the house is in sleep mode
                             infoString = "The front door has been left open";
                             levelValue = messages.warningMessage;
                         }
-                        else if (telemetryDevicesDict[doorSensor.deviceId].property2 == true &&
-                            telemetryDevicesDict[doorController.deviceId].property2 > (doorRotMin + 100) && telemetryDevicesDict[doorSensor.deviceId].property2 == true)    //+50 incase I change some range in arduin code
-                        {
-                            //confirm is false is open
-                            //if the contact sensor senses the door open but the servo isnt in an authorized open state(locked)
-                            //as in the last known servo state was closed
-                            //and the door sensor senses the door as open
-                            infoString = "breach detected at house door, please act immediately";
-                            levelValue = messages.criticalMessage;
-                        }
+                        
                         else
                         {   //if there are no alerts
                             infoString = defaultinfoString;
