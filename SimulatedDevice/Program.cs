@@ -22,7 +22,10 @@ namespace SimulatedDevice
         //private static RaspberryPiUWP
 
 
-        private static readonly string RpiConnectionString = "HostName=FinalYearHub.azure-devices.net;DeviceId=RaspberryPi;SharedAccessKey=rwforzwg0XC7eZpARG0bKD+mjoBkX6ebvEOQ26w2RIA=";
+        // private static readonly string RpiConnectionString = "HostName=FinalYearPROJHub.azure-devices.net;DeviceId=RaspberryPi;SharedAccessKey=rwforzwg0XC7eZpRFJ0bKD+mjoBkX6vcsEOQ26w2UHB=";
+
+        //insert the primary connection stringfor you Rpi device here, it should looks like the comment line above
+        private static readonly string RpiConnectionString = "insert the primary connection stringfor you Rpi device";
         private static TimeSpan telemetryInterval = TimeSpan.FromSeconds(35);
         private static string telemetryDataString;
         //create devices connected to raspberry pi including raspberry pi
@@ -78,7 +81,7 @@ namespace SimulatedDevice
         private static int motionSensorCalibrationDelay = 5;   //wit time for motion sensor to properly calibrate
         //work on storing devices file to use on startup and test auth with mqttX
         private static int testMessageCount = 0;    //for testing in case alerts arent sent through normal alert
-        private static int testMessageactivationThreshold = 50;
+        private static int testMessageactivationThreshold = 5;
         public static async Task Main()
         {
             Stopwatch stopwatch = new Stopwatch();  //stop watch is to account for the motion sensor starting time
@@ -251,28 +254,25 @@ namespace SimulatedDevice
 
                 //perfrom actions here
                 UpdateTelemetry();  //update the telemetry data before sending
-                await Task.Delay(TimeSpan.FromSeconds(2));
+                await Task.Delay(TimeSpan.FromSeconds(2));  //to allow the telemetry update complete via OnSerialReceived
                 foreach (KeyValuePair<string, object> telemetrydata in telemetryDevicesDict)
                 {
                     //send telemetry from all the connected devices including rpi
                     //the telemetry can be occasssionally altered asrec
                     // serialize the telemetry data and convert it to JSON.
-                    var currentTelemery = (telemetrydata.Value);  //this will be of type object
-                    JsonSerializerSettings settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
-                    telemetryDataString = JsonConvert.SerializeObject(currentTelemery, settings);
 
-
-                    // Encode the serialized object using UTF-8 so it can be parsed by IoT Hub when
-                    var message = new Message(Encoding.UTF8.GetBytes(telemetryDataString))
-                    {
-                        ContentEncoding = "utf-8",
-                        ContentType = "application/json",
-                    };
                      #region code to determine the alert level of the telemetry data for routing
-
                     //the dictionary key helps know the correct type cast for the currentTelemetry checking
                     if (telemetrydata.Key == UserDetails.deviceId)
                     {
+                        if (testMessageCount >= testMessageactivationThreshold)
+                        {   //use test warning instead
+                            infoString = "Morawo testing Finalyear App: " + testMessageCount;
+                            levelValue = messages.warningMessage;
+                            testMessageCount = 0;
+                        }
+                        testMessageCount++;
+
                         if (telemetryDevicesDict[doorSensor.deviceId].property2 == true &&
                             telemetryDevicesDict[doorController.deviceId].property2 > (doorRotMin + 100))    //+50 incase I change some range in arduin code
                         {
@@ -309,7 +309,6 @@ namespace SimulatedDevice
                             infoString = "The front door has been left open";
                             levelValue = messages.warningMessage;
                         }
-                        
                         else
                         {   //if there are no alerts
                             infoString = defaultinfoString;
@@ -317,18 +316,20 @@ namespace SimulatedDevice
                         }
 
                     }
-
                     
                     //for testing purposes to send alerts id nothing else triggers an alert
-                    if (testMessageCount >= testMessageactivationThreshold)
-                    {   //use test warning instead
-                        infoString = "Morawo testing Finalyear App, both lights are on";
-                        levelValue = messages.warningMessage;
-                        testMessageCount = 0;
-                    }
-                    testMessageCount++;
-
-                    telemetryDevicesDict[UserDetails.deviceId].Misc = $"{levelValue}:{infoString}";    
+                    telemetryDevicesDict[UserDetails.deviceId].Misc = $"{levelValue}:{infoString}";
+                    #endregion
+                    #region serialize and store the data
+                    var currentTelemery = (telemetrydata.Value);  //this will be of type object
+                    JsonSerializerSettings settings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto };
+                    telemetryDataString = JsonConvert.SerializeObject(currentTelemery, settings);
+                    // Encode the serialized object using UTF-8 so it can be parsed by IoT Hub when
+                    var message = new Message(Encoding.UTF8.GetBytes(telemetryDataString))
+                    {
+                        ContentEncoding = "utf-8",
+                        ContentType = "application/json",
+                    };
                     #endregion
 
                     //the if statements are arranged arbitrarily but can be ordered by some scheme
@@ -358,6 +359,7 @@ namespace SimulatedDevice
                         Console.WriteLine("event sent");
                         // await _telemetryTask;
                     }
+                    #region exception catch region
                     catch (TaskCanceledException)
                     {
                         var timedOutDevice = JsonConvert.DeserializeObject<TelemetryDataPoint<object>>(telemetryDataString as string);
@@ -382,6 +384,7 @@ namespace SimulatedDevice
                         _ = deviceClient.SendEventAsync(message);    //send but dont await//its a form of trying again                 }
                                                                        // tasks.Add(task); 
                     }
+                    #endregion
                     Console.WriteLine($"{infoString} > Sent message: parameter {DateTime.UtcNow} : {telemetryDataString}");
                     // Print out the message.
 
